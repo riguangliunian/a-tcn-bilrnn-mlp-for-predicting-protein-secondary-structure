@@ -12,9 +12,9 @@ class FinalModel(BaseClassifier):
         self.textEmbedding = TextEmbedding( torch.tensor(embedding, dtype=torch.float),dropout=embDropout ).to(device)
         self.feaEmbedding = TextEmbedding( torch.tensor(feaEmbedding, dtype=torch.float),dropout=embDropout//2,name='feaEmbedding',freeze=True ).to(device)
         self.textCNN = TextTCN( feaSize, contextSizeList, filterNum ).to(device)
-        self.textBiGRU = TextBiLSTMWithAttention(len(contextSizeList)*filterNum, hiddenSize, num_layers=num_layers,num_heads=2, dropout=BiGRUDropout).to(device)
-        self.linear_output = nn.Linear(len(contextSizeList)*filterNum+hiddenSize*2, classNum).to(device)
-        self.moduleList = nn.ModuleList([self.textEmbedding,self.feaEmbedding,self.textCNN,self.textBiGRU])
+        self.textBiGRU = TextBiGRULSTM(len(contextSizeList)*filterNum, hiddenSize, num_layers=num_layers, dropout=BiGRUDropout).to(device)
+        self.fcLinear = MLP(len(contextSizeList)*filterNum+hiddenSize*2, classNum, hiddenList, fcDropout).to(device)
+        self.moduleList = nn.ModuleList([self.textEmbedding,self.feaEmbedding,self.textCNN,self.textBiGRU,self.fcLinear])
         self.classNum = classNum
         self.device = device
         self.feaSize = feaSize
@@ -25,8 +25,7 @@ class FinalModel(BaseClassifier):
         X_conved = self.textCNN(X) # => batchSize × seqLen × scaleNum*filterNum
         X_BiGRUed = self.textBiGRU(X_conved, None) # => batchSize × seqLen × hiddenSize*2
         X = torch.cat([X_conved,X_BiGRUed], dim=2) # => batchSize × seqLen × (scaleNum*filterNum+hiddenSize*2)
-
-        return self.linear_output(X) # => batchSize × seqLen × classNum
+        return self.fcLinear(X) # => batchSize × seqLen × classNum
     def calculate_y_prob(self, X):
         Y_pre = self.calculate_y_logit(X)
         return torch.softmax(Y_pre, dim=2)
@@ -53,6 +52,7 @@ class FinalModel(BaseClassifier):
             Y_preArr.append(Y_pre)
         YArr,Y_preArr = np.vstack(YArr).astype('int32'),np.vstack(Y_preArr).astype('float32')
         return Y_preArr, YArr
+
 
 
 
