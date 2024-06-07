@@ -1,97 +1,24 @@
-from utils import *
+from torch import nn as nn
+from torch.nn import functional as F
+import torch,time,os
+import numpy as np
 
-class TextBiLSTM(nn.Module):
-    def __init__(self, feaSize, hiddenSize, num_layers=1, dropout=0.0, name='textBiLSTM'):
-        super(TextBiLSTM, self).__init__()
+class TextEmbedding(nn.Module):
+    def __init__(self, embedding, dropout=0.3, freeze=False, name='textEmbedding'):
+        super(TextEmbedding, self).__init__()
         self.name = name
-        # 直接初始化双向LSTM层，输入特征大小为feaSize
-        self.biLSTM = nn.LSTM(feaSize, hiddenSize, bidirectional=True, batch_first=True, num_layers=num_layers, dropout=dropout)
-
-    def forward(self, x, xlen=None):
-        # x: batchSize × seqLen × feaSize
-        if xlen is not None:
-            # 如果提供了序列长度，对序列进行排序和打包
-            xlen, indices = torch.sort(xlen, descending=True)
-            _, desortedIndices = torch.sort(indices, descending=False)
-            x = nn.utils.rnn.pack_padded_sequence(x[indices], xlen, batch_first=True)
-
-        # 直接将输入传递给双向LSTM层
-        output, _ = self.biLSTM(x)  # output: batchSize × seqLen × hiddenSize*2
-
-        if xlen is not None:
-            # 如果序列被打包，解包输出并恢复原始顺序
-            output, _ = nn.utils.rnn.pad_packed_sequence(output, batch_first=True)
-            output = output[desortedIndices]
-
-        return output  # output: batchSize × seqLen × hiddenSize*2
-    
-
-import math
-class MultiHeadAttention(nn.Module):
-    def __init__(self, hidden_size, num_heads):
-        super(MultiHeadAttention, self).__init__()
-        assert hidden_size % num_heads == 0, "Hidden size must be divisible by the number of heads."
-
-        self.num_heads = num_heads
-        self.head_dim = hidden_size // num_heads
-
-        self.query_transform = nn.Linear(hidden_size, hidden_size)
-        self.key_transform = nn.Linear(hidden_size, hidden_size)
-        self.value_transform = nn.Linear(hidden_size, hidden_size)
-
-        self.fc_out = nn.Linear(hidden_size, hidden_size)
-
-    def forward(self, outputs):
-        batch_size = outputs.size(0)
-
-        # Transform and split the queries, keys, and values
-        queries = self.query_transform(outputs).view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2)
-        keys = self.key_transform(outputs).view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2)
-        values = self.value_transform(outputs).view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2)
-
-        # Compute the attention scores
-        energy = torch.matmul(queries, keys.transpose(-2, -1)) / math.sqrt(self.head_dim)
-        attention = F.softmax(energy, dim=-1)
-
-        # Apply the attention weights to the values
-        x = torch.matmul(attention, values)
-        x = x.transpose(1, 2).contiguous().view(batch_size, -1, self.num_heads * self.head_dim)
-
-        # Final linear transformation
-        x = self.fc_out(x)
-
-        return x
+        self.embedding = nn.Embedding.from_pretrained(embedding, freeze=freeze)
+        self.dropout = nn.Dropout(p=dropout)
+    def forward(self, x):
+        # x: batchSize × seqLen
+        return self.dropout(self.embedding(x))
 
 
 
-class TextBiLSTMWithAttention(nn.Module):
-    def __init__(self, feaSize, hiddenSize, num_heads, num_layers=1, dropout=0.0, name='textBiLSTMWithAttention'):
-        super(TextBiLSTMWithAttention, self).__init__()
-        self.name = name
-        self.biLSTM = nn.LSTM(feaSize, hiddenSize, bidirectional=True, batch_first=True, num_layers=num_layers, dropout=dropout)
-        self.multihead_attention = MultiHeadAttention(hiddenSize * 2, num_heads)  # 使用隐藏层大小的两倍，因为是双向的
-
-    def forward(self, x, xlen=None):
-        if xlen is not None:
-            xlen, indices = torch.sort(xlen, descending=True)
-            _, desortedIndices = torch.sort(indices, descending=False)
-            x = nn.utils.rnn.pack_padded_sequence(x[indices], xlen, batch_first=True)
-
-        output, _ = self.biLSTM(x)  # output: batchSize × seqLen × (hiddenSize * 2)
-
-        if xlen is not None:
-            output, _ = nn.utils.rnn.pad_packed_sequence(output, batch_first=True)
-            output = output[desortedIndices]
-
-        # 应用多头注意力机制
-        output = self.multihead_attention(output)  # 注意这里我们只取了输出，没有取权重
-
-        return output  # output: batchSize × seqLen × (hiddenSize * 2)
-
-
-class TextTCN1(nn.Module):
-    def __init__(self, feaSize, contextSizeList, filterNum, name='textTCN'):
-        super(TextTCN, self).__init__()
+############多尺度
+class TextMSTCN(nn.Module):
+    def __init__(self, feaSize, contextSizeList, filterNum, name='textMSTCN'):
+        super(TextMSTCN, self).__init__()
         self.name = name
         moduleList = []
         # Define ResBlock
@@ -120,7 +47,11 @@ class TextTCN1(nn.Module):
         x = [conv(x) for conv in self.tcnList] # => scaleNum * (batchSize × filterNum × seqLen)
         return torch.cat(x, dim=1).transpose(1,2) # => batchSize × seqLen × scaleNum*filterNum
     
-class TextTCN2(nn.Module):
+
+
+
+########################双向实现
+class TextTCN(nn.Module):
     def __init__(self, feaSize, contextSizeList, filterNum, name='textTCN'):
         super(TextTCN, self).__init__()
         self.name = name
@@ -180,3 +111,120 @@ class TextTCN2(nn.Module):
         output = self.conv1x1(output)  # => batchSize × seqLen × filterNum
         output = output.transpose(1, 2)  # => batchSize × seqLen × (2 * filterNum)
         return output
+
+
+
+##BiGRU
+class TextBiGRU(nn.Module):
+    def __init__(self, feaSize, hiddenSize, num_layers=1, dropout=0.0, name='textBiGRU'):
+        super(TextBiGRU, self).__init__()
+        self.name = name
+        self.biGRU = nn.GRU(feaSize, hiddenSize, bidirectional=True, batch_first=True, num_layers=num_layers, dropout=dropout)
+    def forward(self, x, xlen=None):
+        # x: batchSizeh × seqLen × feaSize
+        if xlen is not None:
+            xlen, indices = torch.sort(xlen, descending=True)
+            _, desortedIndices = torch.sort(indices, descending=False)
+
+            x = nn.utils.rnn.pack_padded_sequence(x[indices], xlen, batch_first=True)
+        output, hn = self.biGRU(x) # output: batchSize × seqLen × hiddenSize*2; hn: numLayers*2 × batchSize × hiddenSize
+        if xlen is not None:
+            output, _ = nn.utils.rnn.pad_packed_sequence(output, batch_first=True)
+            return output[desortedIndices]
+        return output # output: batchSize × seqLen × hiddenSize*2
+##BiGRU-LSTM
+
+
+class TextBiGRULSTM(nn.Module):
+    def __init__(self, feaSize, hiddenSize, num_layers=1, dropout=0.0, name='textBiGRU'):
+        super(TextBiGRULSTM, self).__init__()
+        self.name = name
+        self.biGRU = nn.GRU(feaSize, hiddenSize, bidirectional=True, batch_first=True, num_layers=num_layers, dropout=dropout)
+        self.biLSTM = nn.LSTM(hiddenSize * 2, hiddenSize, bidirectional=True, batch_first=True)
+        self.biGRU = nn.GRU(feaSize, hiddenSize, bidirectional=True, batch_first=True, num_layers=num_layers, dropout=dropout)
+        self.biLSTM = nn.LSTM(hiddenSize * 2, hiddenSize, bidirectional=True, batch_first=True)
+        self.biGRU = nn.GRU(feaSize, hiddenSize, bidirectional=True, batch_first=True, num_layers=num_layers, dropout=dropout)
+        self.biLSTM = nn.LSTM(hiddenSize * 2, hiddenSize, bidirectional=True, batch_first=True)
+
+
+    def forward(self, x, xlen=None):
+        # x: batchSize × seqLen × feaSize
+        if xlen is not None:
+            xlen, indices = torch.sort(xlen, descending=True)
+            _, desortedIndices = torch.sort(indices, descending=False)
+
+            x = nn.utils.rnn.pack_padded_sequence(x[indices], xlen, batch_first=True)
+
+        # Pass through BiGRU
+        output, hn = self.biGRU(x)  # output: batchSize × seqLen × hiddenSize*2; hn: numLayers*2 × batchSize × hiddenSize
+
+        # Pass through BiLSTM
+        output, _ = self.biLSTM(output)  # output: batchSize × seqLen × hiddenSize*2
+
+        if xlen is not None:
+            output, _ = nn.utils.rnn.pad_packed_sequence(output, batch_first=True)
+            return output[desortedIndices]
+
+        return output  # output: batchSize × seqLen × hiddenSize*2
+
+
+
+
+class LinearRelu(nn.Module):
+    def __init__(self, inSize, outSize, name='linearRelu'):
+        super(LinearRelu, self).__init__()
+        self.name = name
+        self.layer = nn.Sequential(
+                            nn.ReLU(),
+                            nn.Linear(inSize, outSize),
+                            nn.ReLU()
+                         )
+    def forward(self, x):
+        return self.layer(x)
+
+class MLP(nn.Module):
+    def __init__(self, inSize, outSize, hiddenList=[], dropout=0.1, name='MLP', actFunc=nn.ReLU):
+        super(MLP, self).__init__()
+        self.name = name
+        layers = nn.Sequential()
+        for i,os in enumerate(hiddenList):
+            layers.add_module(str(i*2), nn.Linear(inSize, os))
+            layers.add_module(str(i*2+1), actFunc())
+            inSize = os
+        self.hiddenLayers = layers
+        self.dropout = nn.Dropout(p=dropout)
+        self.out = nn.Linear(inSize, outSize)
+    def forward(self, x):
+        x = self.hiddenLayers(x)
+        return self.out(self.dropout(x))
+
+##MLP_Mixer
+class MLP_Mixer(nn.Module):
+    def __init__(self, inSize, outSize, hiddenList=[], dropout=0.1, name='MLP-Mixer', actFunc=nn.GELU):
+        super(MLP_Mixer, self).__init__()
+        self.name = name
+        layers = nn.Sequential()
+        for i, os in enumerate(hiddenList):
+            # Mixer Token-Mixing Layer
+            layers.add_module(f'token_mixing_{i}', nn.Sequential(
+                nn.Linear(inSize, os),
+                actFunc(),
+                nn.Linear(os, os),
+            ))
+
+            # Mixer Channel-Mixing Layer
+            layers.add_module(f'channel_mixing_{i}', nn.Sequential(
+                nn.LayerNorm(os),
+                nn.Linear(os, os),
+                actFunc(),
+            ))
+            
+            inSize = os
+
+        self.mixer_layers = layers
+        self.dropout = nn.Dropout(p=dropout)
+        self.out = nn.Linear(inSize, outSize)
+
+    def forward(self, x):
+        x = self.mixer_layers(x)
+        return self.out(self.dropout(x))
