@@ -1,17 +1,20 @@
 # a-tcn-birnn-mlp-for-predicting-protein-secondary-structure
 
-本项目采用融合Temporal Convolutional Network (TCN), Bidirectional Recurrent Neural Network (BiRNN), 和 Multi-Layer Perceptron (MLP)的混合神经网络模型，用于预测蛋白质的二级结构。
+This project uses a hybrid neural network model that combines Temporal Convolutional Network (TCN), Bidirectional Recurrent Neural Network (BiRNN), and Multi-Layer Perceptron (MLP) to predict the secondary structure of proteins.
 
 ## 项目简介
 
-a-tcn-birnn-mlp-for-predicting-protein-secondary-structure是一个利用深度学习方法预测蛋白质二级结构的研究项目。通过结合TCN, BiRNN, 和 MLP三种不同的神经网络结构，本项目旨在提高蛋白质二级结构预测的准确性和效率。
+a-tcn-birnn-mlp-for-predicting-protein-secondary-structure is a research project that uses deep learning methods to predict protein secondary structure. By combining three different neural network structures, TCN, BiRNN, and MLP, this project aims to improve the accuracy and efficiency of protein secondary structure prediction.
 
 ## 特性
 
-- 结合了TCN, BiRNN, 和 MLP的混合模型。
-- 高效的数据处理和模型训练流程。
-- 提供预训练模型和易于使用的预测脚本。
+- A hybrid model that combines TCN, BiRNN, and MLP.
+- Efficient data processing and model training process.
+- Provides pre-trained models and easy-to-use prediction scripts.
 
+
+## 使用
+The model part of this article mainly includes the main model used in this article, and utils and layers are the necessary single-layer architecture and word vector processing parts of the model. After running the three python files, run run to get the results.
 ## 安装
 
 克隆仓库：
