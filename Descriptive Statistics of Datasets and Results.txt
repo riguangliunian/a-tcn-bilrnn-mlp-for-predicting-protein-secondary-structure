@@ -1,0 +1,5 @@
+TS115:115 Amino Acids
+CB513:513 Amino Acids
+PDB（2018–06–6 to 2020）：15078 Amino Acids
+
+Because the data results are too complex to show the results of the secondary structure of each amino acid sequence.
